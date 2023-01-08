@@ -11,4 +11,4 @@ This project demonstrates a convenient way to implement ExoPlayer along with Jet
 
 - [ExoPlayer](https://exoplayer.dev/) based playback
 - Jetpack Media3
-- Media notification
+- Media Notifications
