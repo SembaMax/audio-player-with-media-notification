@@ -5,6 +5,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.media3.common.*
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -12,26 +15,40 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.PlayerNotificationManager
+import com.semba.audioplayer.data.TrackItem
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.*
+import javax.inject.Inject
 
-class MediaViewModel {
+@HiltViewModel
+class MediaViewModel @Inject constructor(
+    private val savedStateHandle: SavedStateHandle,
+    val player: ExoPlayer
+): ViewModel() {
 
     companion object {
         const val SESSION_INTENT_REQUEST_CODE = 0
     }
 
-    val playlist = arrayListOf(
-        MediaTrack("1", "", "", ""),
-        MediaTrack("2", "", "", ""),
-        MediaTrack("3", "", "", "")
+    private val playlist = arrayListOf(
+        TrackItem("1", "", "", "", "", ""),
+        TrackItem("2", "", "", "", "", ""),
+        TrackItem("3", "", "", "", "", ""),
+        TrackItem("4", "", "", "", "", ""),
+        TrackItem("5", "", "", "", "", ""),
+    )
+
+    val uiState: StateFlow<PlayerUIState> = MutableStateFlow(PlayerUIState.Tracks(playlist)).stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        initialValue = PlayerUIState.Loading
     )
 
     private lateinit var notificationManager: MediaNotificationManager
 
-    // The current player will either be an ExoPlayer (for local playback)
-    lateinit var currentPlayer: ExoPlayer
     protected lateinit var mediaSession: MediaSession
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
@@ -47,11 +64,11 @@ class MediaViewModel {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
-        currentPlayer = ExoPlayer.Builder(context).build();
-        currentPlayer.setAudioAttributes(audioAttributes, true)
-        currentPlayer.repeatMode = Player.REPEAT_MODE_OFF
+        currentPlayer = ExoPlayer.Builder(context).build()
+        player.setAudioAttributes(audioAttributes, true)
+        player.repeatMode = Player.REPEAT_MODE_OFF
 
-        currentPlayer.addListener(playerListener)
+        player.addListener(playerListener)
 
         setupPlaylist(context)
     }
@@ -197,3 +214,9 @@ class MediaViewModel {
 }
 
 private const val TAG = "MediaNotification"
+
+
+sealed interface PlayerUIState {
+    data class Tracks(val items: List<TrackItem>): PlayerUIState
+    object Loading: PlayerUIState
+}
