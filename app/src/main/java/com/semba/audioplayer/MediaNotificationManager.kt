@@ -21,6 +21,7 @@ const val NOW_PLAYING_NOTIFICATION_ID = 0xb339 // Arbitrary number used to ident
  * A wrapper class for ExoPlayer's PlayerNotificationManager. It sets up the notification shown to
  * the user during audio playback and provides track metadata, such as track title and icon image.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MediaNotificationManager(
     private val context: Context,
     sessionToken: SessionToken,
@@ -49,6 +50,8 @@ class MediaNotificationManager(
                 setPlayer(player)
                 setUseRewindAction(true)
                 setUseFastForwardAction(true)
+                setUseRewindActionInCompactView(true)
+                setUseFastForwardActionInCompactView(true)
                 setUseRewindActionInCompactView(true)
                 setUseFastForwardActionInCompactView(true)
             }
