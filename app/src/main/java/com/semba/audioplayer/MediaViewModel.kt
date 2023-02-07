@@ -44,10 +44,13 @@ class MediaViewModel @Inject constructor(
         TrackItem("6", "https://www.matb3aa.com/music/Shahyn/Ma.3aleena-Shahyn-MaTb3aa.Com.mp3", "https://i.scdn.co/image/ab6761610000e5eb368ee15b276f33ab10530737", "Ma Aleena", "Shahyn", "3:27"),
     )
 
-    val _currentPlayingIndex = MutableStateFlow(0)
+    private val _currentPlayingIndex = MutableStateFlow(0)
     val currentPlayingIndex = _currentPlayingIndex.asStateFlow()
 
-    val _isPlaying = MutableStateFlow(false)
+    private val _totalDurationInMS = MutableStateFlow(0L)
+    val totalDurationInMS = _totalDurationInMS.asStateFlow()
+
+    private val _isPlaying = MutableStateFlow(false)
     val isPlaying = _isPlaying.asStateFlow()
 
     val uiState: StateFlow<PlayerUIState> = MutableStateFlow(PlayerUIState.Tracks(playlist)).stateIn(
@@ -120,6 +123,10 @@ class MediaViewModel @Inject constructor(
             ControlButtons.Next -> player.seekToNextMediaItem()
             ControlButtons.Rewind -> player.seekToPreviousMediaItem()
         }
+    }
+
+    fun updatePlayerPosition(position: Long) {
+        player.seekTo(position)
     }
 
     fun onStart(context: Context) {
@@ -211,12 +218,13 @@ class MediaViewModel @Inject constructor(
     private val playerListener = object : Player.Listener {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            Log.d(TAG,"onPlaybackStateChanged: ${playbackState}")
             super.onPlaybackStateChanged(playbackState)
+            syncPlayerFlows()
             when (playbackState) {
                 Player.STATE_BUFFERING,
                 Player.STATE_READY -> {
                     notificationManager.showNotificationForPlayer(player)
-                    _currentPlayingIndex.value = player.currentMediaItemIndex
                 }
                 else -> {
                     notificationManager.hideNotification()
@@ -224,7 +232,14 @@ class MediaViewModel @Inject constructor(
             }
         }
 
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            Log.d(TAG,"onMediaItemTransition: ${mediaItem?.mediaMetadata?.title}")
+            super.onMediaItemTransition(mediaItem, reason)
+            syncPlayerFlows()
+        }
+
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            Log.d(TAG,"onIsPlayingChanged: ${isPlaying}")
             super.onIsPlayingChanged(isPlaying)
             _isPlaying.value = isPlaying
         }
@@ -234,9 +249,14 @@ class MediaViewModel @Inject constructor(
             Log.e(TAG,"Error: ${error.message}")
         }
     }
+
+    private fun syncPlayerFlows() {
+        _currentPlayingIndex.value = player.currentMediaItemIndex
+        _totalDurationInMS.value = player.duration.coerceAtLeast(0L)
+    }
 }
 
-private const val TAG = "MediaNotification"
+private const val TAG = "MediaAppTag"
 
 
 sealed interface PlayerUIState {

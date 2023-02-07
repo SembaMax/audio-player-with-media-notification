@@ -4,14 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,8 +29,10 @@ import com.semba.audioplayer.data.ControlButtons
 import com.semba.audioplayer.data.TrackItem
 import com.semba.audioplayer.ui.theme.AudioPlayerTheme
 import com.semba.audioplayer.ui.theme.*
+import com.semba.audioplayer.util.formatMinSec
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.seconds
 
 
 @AndroidEntryPoint
@@ -51,6 +50,15 @@ class MainActivity : ComponentActivity() {
                     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                     val currentTrackState by viewModel.currentPlayingIndex.collectAsStateWithLifecycle()
                     val isPlayingState by viewModel.isPlaying.collectAsStateWithLifecycle()
+                    val totalDurationState by viewModel.totalDurationInMS.collectAsStateWithLifecycle()
+                    var currentPositionState by remember { mutableStateOf(0L) }
+
+                    LaunchedEffect(isPlayingState) {
+                        while(isPlayingState) {
+                            currentPositionState = viewModel.player.currentPosition
+                            delay(1.seconds)
+                        }
+                    }
 
                     when (uiState) {
                         PlayerUIState.Loading -> {
@@ -59,9 +67,13 @@ class MainActivity : ComponentActivity() {
                         is PlayerUIState.Tracks -> {
                             Column(modifier = Modifier.fillMaxSize()) {
                                 AudioPlayerView(viewModel)
-                                PlayerControlsView(currentTrackImage = (uiState as PlayerUIState.Tracks).items[currentTrackState].teaserUrl, isPlayingState) {action ->
-                                    viewModel.updatePlaylist(action)
-                                }
+                                PlayerControlsView(currentTrackImage = (uiState as PlayerUIState.Tracks).items[currentTrackState].teaserUrl,
+                                    totalDuration = totalDurationState,
+                                    currentPosition = currentPositionState,
+                                    isPlaying = isPlayingState,
+                                    navigateTrack =  {action -> viewModel.updatePlaylist(action) },
+                                    seekPosition = {position -> viewModel.updatePlayerPosition((position * 1000).toLong())}
+                                )
                                 PlaylistView((uiState as PlayerUIState.Tracks).items, currentTrackState)
                             }
                         }
@@ -101,7 +113,7 @@ fun AudioPlayerView(viewModel: MediaViewModel) {
 }
 
 @Composable
-fun PlayerControlsView(currentTrackImage: String, isPlaying: Boolean, navigateTrack: (ControlButtons) -> Unit) {
+fun PlayerControlsView(currentTrackImage: String, totalDuration: Long, currentPosition: Long, isPlaying: Boolean, navigateTrack: (ControlButtons) -> Unit, seekPosition: (Float) -> Unit) {
 
     Column(
         Modifier.fillMaxWidth(),
@@ -118,24 +130,61 @@ fun PlayerControlsView(currentTrackImage: String, isPlaying: Boolean, navigateTr
             contentDescription = "player_image"
         )
 
+        Slider(modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, start = 30.dp, end = 30.dp),
+            value = (currentPosition / 1000).toFloat(),
+            valueRange = 0f..(totalDuration / 1000).toFloat(),
+            onValueChange = { seekPosition(it) },
+            colors =
+            SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.tertiary,
+                activeTickColor = MaterialTheme.colorScheme.onBackground,
+                activeTrackColor = MaterialTheme.colorScheme.tertiary
+            ))
+
+        Row(modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 30.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically) {
+            Text(text = currentPosition.formatMinSec(), fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground)
+            Text(text = totalDuration.formatMinSec(), fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground)
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 30.dp, vertical = 30.dp),
+                .padding(start = 30.dp, end = 30.dp, top = 5.dp, bottom = 30.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(imageVector = ImageVector.vectorResource(id = R.drawable.ic_rewind), contentDescription = "player_rewind", modifier = Modifier
-                .size(45.dp)
-                .clickable { navigateTrack(ControlButtons.Rewind) }, tint = MaterialTheme.colorScheme.primary)
+            IconButton(modifier = Modifier
+                .size(45.dp),
+            onClick = {navigateTrack(ControlButtons.Rewind)}) {
+                Icon(imageVector = ImageVector.vectorResource(id = R.drawable.ic_rewind), contentDescription = "player_rewind"
+                    ,tint = MaterialTheme.colorScheme.primary)
+            }
             Spacer(modifier = Modifier.width(30.dp))
-            Icon(imageVector = ImageVector.vectorResource(id = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play), contentDescription = "player_play", modifier = Modifier
-                .size(70.dp)
-                .clickable { navigateTrack(ControlButtons.Play) }, tint = MaterialTheme.colorScheme.primary)
+            IconButton(modifier = Modifier
+                .size(70.dp),
+            onClick = {navigateTrack(ControlButtons.Play)}) {
+                Icon(imageVector = ImageVector.vectorResource(id = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                    contentDescription = "player_play",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(70.dp)
+                )
+            }
             Spacer(modifier = Modifier.width(30.dp))
-            Icon(imageVector = ImageVector.vectorResource(id = R.drawable.ic_next), contentDescription = "player_next", modifier = Modifier
-                .size(45.dp)
-                .clickable { navigateTrack(ControlButtons.Next) }, tint = MaterialTheme.colorScheme.primary)
+            IconButton(modifier = Modifier
+                .size(45.dp),
+            onClick = {navigateTrack(ControlButtons.Next)}) {
+                Icon(imageVector = ImageVector.vectorResource(id = R.drawable.ic_next),
+                    contentDescription = "player_next",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
